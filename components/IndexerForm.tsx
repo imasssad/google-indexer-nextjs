@@ -13,20 +13,41 @@ interface IndexerFormProps {
   setStats: (stats: any) => void
 }
 
-export default function IndexerForm({ 
-  isIndexing, 
-  setIsIndexing, 
-  setResults, 
-  setStats 
+export default function IndexerForm({
+  isIndexing,
+  setIsIndexing,
+  setResults,
+  setStats
 }: IndexerFormProps) {
   const [urls, setUrls] = useState('')
   const [useGoogleApi, setUseGoogleApi] = useState(false)
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.type !== 'text/plain' && !file.name.endsWith('.txt')) {
+      toast.error('Please upload a .txt file')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const content = event.target?.result as string
+      setUrls(content)
+      toast.success(`Loaded ${content.split('\n').filter(url => url.trim()).length} URLs from file`)
+    }
+    reader.onerror = () => {
+      toast.error('Failed to read file')
+    }
+    reader.readAsText(file)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     const urlList = urls.split('\n').filter(url => url.trim())
-    
+
     if (urlList.length === 0) {
       toast.error('Please enter at least one URL')
       return
@@ -78,9 +99,24 @@ export default function IndexerForm({
       
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <label htmlFor="urls" className="block text-sm font-medium text-gray-700 mb-2">
-            Enter URLs (one per line)
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label htmlFor="urls" className="block text-sm font-medium text-gray-700">
+              Enter URLs (one per line)
+            </label>
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                accept=".txt,text/plain"
+                onChange={handleFileUpload}
+                disabled={isIndexing}
+                className="hidden"
+              />
+              <span className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors">
+                <Upload className="w-4 h-4" />
+                Upload File
+              </span>
+            </label>
+          </div>
           <textarea
             id="urls"
             value={urls}
@@ -94,7 +130,7 @@ https://tier1-backlink.com/link"
             disabled={isIndexing}
           />
           <p className="mt-2 text-sm text-gray-500">
-            Supports: HTML pages, PDFs, Forum links, Web 2.0, Tier 1/2/3 backlinks
+            Supports: HTML pages, PDFs, Forum links, Web 2.0, Tier 1/2/3 backlinks (or upload a .txt file)
           </p>
         </div>
 

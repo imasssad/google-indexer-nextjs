@@ -48,55 +48,88 @@ export async function pingBing(url: string): Promise<IndexResult> {
 }
 
 /**
- * Submit URL via IndexNow GET method (simpler, works without key file hosting)
- * Submits to Bing and Yandex directly
+ * Submit URL via IndexNow - Bing uses GET, Yandex uses POST
+ * Submits to Bing and Yandex with their preferred methods
  */
 export async function submitToIndexNowGET(
   url: string,
   apiKey: string
 ): Promise<IndexResult> {
-  const engines = [
-    { name: 'Bing', url: 'https://www.bing.com/indexnow' },
-    { name: 'Yandex', url: 'https://yandex.com/indexnow' }
-  ];
-
   const results: { engine: string; success: boolean; status?: number }[] = [];
 
-  for (const engine of engines) {
-    try {
-      const indexNowUrl = `${engine.url}?url=${encodeURIComponent(url)}&key=${apiKey}`;
+  // Bing: Use GET method
+  try {
+    const bingUrl = `https://www.bing.com/indexnow?url=${encodeURIComponent(url)}&key=${apiKey}`;
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      const response = await fetch(indexNowUrl, {
-        method: 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; IndexerBot/1.0)',
-          'Accept': 'application/json'
-        },
-        signal: controller.signal
-      });
+    const response = await fetch(bingUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; IndexerBot/1.0)',
+        'Accept': 'application/json'
+      },
+      signal: controller.signal
+    });
 
-      clearTimeout(timeoutId);
+    clearTimeout(timeoutId);
 
-      // Log response details for debugging
-      console.log(`${engine.name} Response:`, {
-        status: response.status,
-        statusText: response.statusText,
-        url: indexNowUrl
-      });
+    console.log('Bing Response:', {
+      status: response.status,
+      statusText: response.statusText
+    });
 
-      // IndexNow returns 200 or 202 for success
-      if (response.status === 200 || response.status === 202) {
-        results.push({ engine: engine.name, success: true, status: response.status });
-      } else {
-        results.push({ engine: engine.name, success: false, status: response.status });
-      }
-    } catch (error: any) {
-      console.error(`${engine.name} Error:`, error.message);
-      results.push({ engine: engine.name, success: false });
+    if (response.status === 200 || response.status === 202) {
+      results.push({ engine: 'Bing', success: true, status: response.status });
+    } else {
+      results.push({ engine: 'Bing', success: false, status: response.status });
     }
+  } catch (error: any) {
+    console.error('Bing Error:', error.message);
+    results.push({ engine: 'Bing', success: false });
+  }
+
+  // Yandex: Use POST method with JSON body
+  try {
+    const urlObj = new URL(url);
+    const host = urlObj.hostname;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    const body = {
+      host: host,
+      key: apiKey,
+      keyLocation: `https://${host}/${apiKey}.txt`,
+      urlList: [url]
+    };
+
+    const response = await fetch('https://yandex.com/indexnow', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'User-Agent': 'Mozilla/5.0 (compatible; IndexerBot/1.0)'
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    console.log('Yandex Response:', {
+      status: response.status,
+      statusText: response.statusText
+    });
+
+    if (response.status === 200 || response.status === 202) {
+      results.push({ engine: 'Yandex', success: true, status: response.status });
+    } else {
+      results.push({ engine: 'Yandex', success: false, status: response.status });
+    }
+  } catch (error: any) {
+    console.error('Yandex Error:', error.message);
+    results.push({ engine: 'Yandex', success: false });
   }
 
   const successCount = results.filter(r => r.success).length;
@@ -111,7 +144,7 @@ export async function submitToIndexNowGET(
     return {
       url,
       status: 'success',
-      method: 'IndexNow (GET)',
+      method: 'IndexNow (Bing GET + Yandex POST)',
       message: message,
       timestamp: new Date().toISOString()
     };
@@ -120,7 +153,7 @@ export async function submitToIndexNowGET(
     return {
       url,
       status: 'failed',
-      method: 'IndexNow (GET)',
+      method: 'IndexNow (Bing GET + Yandex POST)',
       error: `Failed to submit to all search engines. Details: ${failureDetails}`,
       timestamp: new Date().toISOString()
     };
