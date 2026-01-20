@@ -22,25 +22,112 @@ export default function IndexerForm({
   const [urls, setUrls] = useState('')
   const [useGoogleApi, setUseGoogleApi] = useState(false)
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const extractUrlsFromHtml = (htmlContent: string): string[] => {
+    const urls: string[] = []
+    // Extract URLs from href attributes
+    const hrefRegex = /href=["']([^"']+)["']/gi
+    let match
+    while ((match = hrefRegex.exec(htmlContent)) !== null) {
+      const url = match[1]
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        urls.push(url)
+      }
+    }
+    // Extract URLs from src attributes
+    const srcRegex = /src=["']([^"']+)["']/gi
+    while ((match = srcRegex.exec(htmlContent)) !== null) {
+      const url = match[1]
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        urls.push(url)
+      }
+    }
+    // Remove duplicates
+    return Array.from(new Set(urls))
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (file.type !== 'text/plain' && !file.name.endsWith('.txt')) {
-      toast.error('Please upload a .txt file')
+    const fileType = file.type
+    const fileName = file.name.toLowerCase()
+
+    // Check if file is supported
+    const isTxt = fileType === 'text/plain' || fileName.endsWith('.txt')
+    const isHtml = fileType === 'text/html' || fileName.endsWith('.html') || fileName.endsWith('.htm')
+    const isPdf = fileType === 'application/pdf' || fileName.endsWith('.pdf')
+
+    if (!isTxt && !isHtml && !isPdf) {
+      toast.error('Please upload a .txt, .html, or .pdf file')
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const content = event.target?.result as string
-      setUrls(content)
-      toast.success(`Loaded ${content.split('\n').filter(url => url.trim()).length} URLs from file`)
+    try {
+      if (isTxt) {
+        // Handle .txt file (contains list of URLs)
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const content = event.target?.result as string
+          setUrls(content)
+          toast.success(`Loaded ${content.split('\n').filter(url => url.trim()).length} URLs from file`)
+        }
+        reader.onerror = () => {
+          toast.error('Failed to read file')
+        }
+        reader.readAsText(file)
+      } else if (isHtml) {
+        // Handle HTML file - extract URLs from HTML content
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const htmlContent = event.target?.result as string
+          const extractedUrls = extractUrlsFromHtml(htmlContent)
+
+          if (extractedUrls.length === 0) {
+            toast.error('No URLs found in HTML file')
+            return
+          }
+
+          const urlsText = extractedUrls.join('\n')
+          setUrls((prev) => (prev ? prev + '\n' + urlsText : urlsText))
+          toast.success(`Extracted ${extractedUrls.length} URLs from HTML file`)
+        }
+        reader.onerror = () => {
+          toast.error('Failed to read HTML file')
+        }
+        reader.readAsText(file)
+      } else if (isPdf) {
+        // Handle PDF file - send to backend for text extraction
+        const formData = new FormData()
+        formData.append('file', file)
+
+        toast.loading('Extracting URLs from PDF...', { id: 'pdf-extract' })
+
+        try {
+          const response = await axios.post('/api/extract-urls', formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data'
+            }
+          })
+
+          const extractedUrls = response.data.urls || []
+
+          if (extractedUrls.length === 0) {
+            toast.error('No URLs found in PDF file', { id: 'pdf-extract' })
+            return
+          }
+
+          const urlsText = extractedUrls.join('\n')
+          setUrls((prev) => (prev ? prev + '\n' + urlsText : urlsText))
+          toast.success(`Extracted ${extractedUrls.length} URLs from PDF`, { id: 'pdf-extract' })
+        } catch (error: any) {
+          console.error('PDF extraction error:', error)
+          toast.error(error.response?.data?.error || 'Failed to extract URLs from PDF', { id: 'pdf-extract' })
+        }
+      }
+    } catch (error: any) {
+      console.error('File processing error:', error)
+      toast.error('Failed to process file')
     }
-    reader.onerror = () => {
-      toast.error('Failed to read file')
-    }
-    reader.readAsText(file)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -106,7 +193,7 @@ export default function IndexerForm({
             <label className="cursor-pointer">
               <input
                 type="file"
-                accept=".txt,text/plain"
+                accept=".txt,.html,.htm,.pdf,text/plain,text/html,application/pdf"
                 onChange={handleFileUpload}
                 disabled={isIndexing}
                 className="hidden"
@@ -130,7 +217,10 @@ https://tier1-backlink.com/link"
             disabled={isIndexing}
           />
           <p className="mt-2 text-sm text-gray-500">
-            Supports: HTML pages, PDFs, Forum links, Web 2.0, Tier 1/2/3 backlinks (or upload a .txt file)
+            Supports: HTML pages, PDFs, Forum links, Web 2.0, Tier 1/2/3 backlinks
+          </p>
+          <p className="mt-1 text-xs text-gray-400">
+            Upload: .txt file (list of URLs) | .html/.pdf files (to index directly)
           </p>
         </div>
 
