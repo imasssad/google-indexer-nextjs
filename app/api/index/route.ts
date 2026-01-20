@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { indexMultipleUrls, validateUrls } from '@/lib/indexer';
 import { saveResults } from '@/lib/storage';
 
-// Store results in memory (also saved to file for persistence)
-let lastResults: any[] = [];
-let isIndexing = false;
+// Store results in memory for status checking
+let internalIsIndexing = false;
 
 export async function POST(request: NextRequest) {
   try {
     // Check if already indexing
-    if (isIndexing) {
+    if (internalIsIndexing) {
       return NextResponse.json(
         { error: 'Indexing already in progress' },
         { status: 400 }
@@ -49,8 +48,7 @@ export async function POST(request: NextRequest) {
     const indexNowApiKey = indexnow_key || process.env.INDEXNOW_API_KEY;
 
     // Start indexing
-    isIndexing = true;
-    lastResults = [];
+    internalIsIndexing = true;
 
     // Index URLs
     const results = await indexMultipleUrls(
@@ -60,10 +58,9 @@ export async function POST(request: NextRequest) {
       indexNowApiKey
     );
 
-    lastResults = results;
-    isIndexing = false;
+    internalIsIndexing = false;
 
-    // Save results to file for persistence
+    // Save results to Supabase
     saveResults(results);
 
     // Return results
@@ -79,7 +76,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
-    isIndexing = false;
+    internalIsIndexing = false;
     console.error('Error in index API:', error);
 
     return NextResponse.json(
@@ -88,6 +85,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
-// Export results for status endpoint
-export { lastResults, isIndexing };
