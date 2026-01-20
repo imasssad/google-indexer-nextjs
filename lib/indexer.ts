@@ -90,7 +90,7 @@ export async function submitToIndexNowGET(
   const successCount = results.filter(r => r.success).length;
 
   if (successCount > 0) {
-    const successEngines = results.filter(r => r.success).map(r => r.name).join(', ');
+    const successEngines = results.filter(r => r.success).map(r => r.engine).join(', ');
     return {
       url,
       status: 'success',
