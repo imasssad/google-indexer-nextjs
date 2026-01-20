@@ -71,10 +71,21 @@ export async function submitToIndexNowGET(
 
       const response = await fetch(indexNowUrl, {
         method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; IndexerBot/1.0)',
+          'Accept': 'application/json'
+        },
         signal: controller.signal
       });
 
       clearTimeout(timeoutId);
+
+      // Log response details for debugging
+      console.log(`${engine.name} Response:`, {
+        status: response.status,
+        statusText: response.statusText,
+        url: indexNowUrl
+      });
 
       // IndexNow returns 200 or 202 for success
       if (response.status === 200 || response.status === 202) {
@@ -82,28 +93,35 @@ export async function submitToIndexNowGET(
       } else {
         results.push({ engine: engine.name, success: false, status: response.status });
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error(`${engine.name} Error:`, error.message);
       results.push({ engine: engine.name, success: false });
     }
   }
 
   const successCount = results.filter(r => r.success).length;
+  const failedEngines = results.filter(r => !r.success).map(r => r.engine);
 
   if (successCount > 0) {
     const successEngines = results.filter(r => r.success).map(r => r.engine).join(', ');
+    const message = failedEngines.length > 0
+      ? `✅ Submitted to ${successEngines} (Failed: ${failedEngines.join(', ')})`
+      : `✅ Submitted to ${successEngines}`;
+
     return {
       url,
       status: 'success',
       method: 'IndexNow (GET)',
-      message: `✅ Submitted to ${successEngines}`,
+      message: message,
       timestamp: new Date().toISOString()
     };
   } else {
+    const failureDetails = results.map(r => `${r.engine}: ${r.status || 'timeout/error'}`).join(', ');
     return {
       url,
       status: 'failed',
       method: 'IndexNow (GET)',
-      error: 'Failed to submit to all search engines',
+      error: `Failed to submit to all search engines. Details: ${failureDetails}`,
       timestamp: new Date().toISOString()
     };
   }
