@@ -36,10 +36,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if Google API requested but no credentials
-    if (use_google_api && !google_credentials) {
+    // Get Google credentials from request body or environment variable
+    let googleCredentials = google_credentials;
+    if (use_google_api && !googleCredentials) {
+      const envCredentials = process.env.GOOGLE_CREDENTIALS;
+      if (envCredentials) {
+        try {
+          googleCredentials = JSON.parse(envCredentials);
+        } catch (e) {
+          console.error('Failed to parse GOOGLE_CREDENTIALS env var:', e);
+        }
+      }
+    }
+
+    if (use_google_api && !googleCredentials) {
       return NextResponse.json(
-        { error: 'Google API requested but no credentials provided' },
+        { error: 'Google API requested but no credentials configured. Set GOOGLE_CREDENTIALS in environment variables.' },
         { status: 400 }
       );
     }
@@ -54,7 +66,7 @@ export async function POST(request: NextRequest) {
     const results = await indexMultipleUrls(
       validUrls,
       use_google_api,
-      google_credentials,
+      googleCredentials,
       indexNowApiKey
     );
 
